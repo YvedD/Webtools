@@ -1,1 +1,256 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <title>Langlopende shiftkalender</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            margin: 16px;
+        }
+
+        h1 {
+            margin-bottom: 8px;
+        }
+
+        .controls {
+            margin-bottom: 16px;
+        }
+
+        label {
+            margin-right: 12px;
+        }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            max-width: 800px;
+        }
+
+        th, td {
+            border: 1px solid #999;
+            padding: 6px 8px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #eee;
+        }
+
+        select {
+            width: 110px;
+        }
+
+        .button-row {
+            margin-top: 16px;
+        }
+
+        button {
+            padding: 8px 12px;
+            margin-right: 8px;
+        }
+
+        .small-info {
+            font-size: 0.9em;
+            color: #555;
+            margin-top: 8px;
+        }
+    </style>
+    <script>
+        function pad2(n) {
+            return n.toString().padStart(2, "0");
+        }
+
+        function formatDate(date) {
+            const year = date.getFullYear();
+            const month = pad2(date.getMonth() + 1);
+            const day = pad2(date.getDate());
+            return `${year}-${month}-${day}`;
+        }
+
+        function parseDateInput(value) {
+            const parts = value.split("-");
+            if (parts.length !== 3) return null;
+            const year = parseInt(parts[0], 10);
+            const month = parseInt(parts[1], 10) - 1;
+            const day = parseInt(parts[2], 10);
+            return new Date(year, month, day);
+        }
+
+        function vulHuidigeMaandIn() {
+            const nu = new Date();
+            const year = nu.getFullYear();
+            const month = nu.getMonth();
+
+            const start = new Date(year, month, 1);
+            const eind = new Date(year, month + 1, 0);
+
+            document.getElementById("startDatum").value = formatDate(start);
+            document.getElementById("eindDatum").value = formatDate(eind);
+
+            genereerTabel();
+        }
+
+        function genereerTabel() {
+            const startInput = document.getElementById("startDatum").value;
+            const eindInput = document.getElementById("eindDatum").value;
+
+            const start = parseDateInput(startInput);
+            const eind = parseDateInput(eindInput);
+
+            if (!start || !eind || start > eind) {
+                alert("Controleer de start- en einddatum (start moet ≤ eind zijn).");
+                return;
+            }
+
+            const tbody = document.getElementById("kalenderBody");
+            tbody.innerHTML = "";
+
+            let dag = new Date(start.getTime());
+            while (dag <= eind) {
+                const tr = document.createElement("tr");
+
+                const tdDatum = document.createElement("td");
+                tdDatum.textContent = formatDate(dag);
+
+                const tdWeekdag = document.createElement("td");
+                const weekdagIndex = dag.getDay();
+                const weekdagen = ["zo", "ma", "di", "wo", "do", "vr", "za"];
+                tdWeekdag.textContent = weekdagen[weekdagIndex];
+
+                const tdStatus = document.createElement("td");
+                const select = document.createElement("select");
+                select.innerHTML = `
+                    <option value="">(geen)</option>
+                    <option value="dagshift">dagshift</option>
+                    <option value="nachtshift">nachtshift</option>
+                    <option value="afwezig">afwezig</option>
+                `;
+                tdStatus.appendChild(select);
+
+                tr.appendChild(tdDatum);
+                tr.appendChild(tdWeekdag);
+                tr.appendChild(tdStatus);
+
+                tbody.appendChild(tr);
+
+                dag.setDate(dag.getDate() + 1);
+            }
+        }
+
+        function verzamelDataAlsCsv() {
+            const tbody = document.getElementById("kalenderBody");
+            const rows = tbody.getElementsByTagName("tr");
+
+            const lijnen = [];
+            lijnen.push("datum,weekdag,shift");
+
+            for (let i = 0; i < rows.length; i++) {
+                const cells = rows[i].getElementsByTagName("td");
+                const datum = cells[0].textContent.trim();
+                const weekdag = cells[1].textContent.trim();
+                const select = cells[2].getElementsByTagName("select")[0];
+                const shift = select.value.trim();
+
+                if (shift !== "") {
+                    lijnen.push(`${datum},${weekdag},${shift}`);
+                }
+            }
+
+            return lijnen.join("\n");
+        }
+
+        function verstuurMail() {
+            const mailTo = document.getElementById("mailAdres").value.trim();
+            if (!mailTo) {
+                alert("Vul eerst een e-mailadres in.");
+                return;
+            }
+
+            const csvBody = verzamelDataAlsCsv();
+
+            if (!csvBody || csvBody.split("\n").length <= 1) {
+                const doorgaan = confirm(
+                    "Er zijn geen ingevulde dagen (geen shift gekozen). Toch mailen?"
+                );
+                if (!doorgaan) {
+                    return;
+                }
+            }
+
+            const subject = document.getElementById("mailOnderwerp").value.trim() || "Shiftkalender";
+
+            const encodedSubject = encodeURIComponent(subject);
+            const encodedBody = encodeURIComponent(csvBody);
+
+            const mailtoLink = `mailto:${mailTo}?subject=${encodedSubject}&body=${encodedBody}`;
+
+            window.location.href = mailtoLink;
+        }
+
+        window.onload = function () {
+            vulHuidigeMaandIn();
+        };
+    </script>
+</head>
+<body>
+<h1>Langlopende shiftkalender</h1>
+
+<div class="controls">
+    <div>
+        <label>
+            Startdatum:
+            <input type="date" id="startDatum">
+        </label>
+
+        <label>
+            Einddatum:
+            <input type="date" id="eindDatum">
+        </label>
+
+        <button type="button" onclick="genereerTabel()">Herlaad kalender</button>
+    </div>
+
+    <div class="small-info">
+        Bij het openen worden automatisch de dagen van de huidige maand geladen.<br>
+        Je kan de periode aanpassen en dan op <strong>Herlaad kalender</strong> klikken.
+    </div>
+</div>
+
+<table>
+    <thead>
+    <tr>
+        <th>Datum</th>
+        <th>Weekdag</th>
+        <th>Shift</th>
+    </tr>
+    </thead>
+    <tbody id="kalenderBody">
+    </tbody>
+</table>
+
+<div class="button-row">
+    <div>
+            <label>
+                Mail naar:
+                <input type="email" id="mailAdres" placeholder="vb. xxx@gmail.com">
+            </label>
+            <br><br>
+            <label>
+                Onderwerp:
+                <input type="text" id="mailOnderwerp" placeholder="Shiftkalender">
+            </label>
+    </div>
+    <br>
+    <button type="button" onclick="verstuurMail()">Verstuur per mail (CSV in body)</button>
+</div>
+
+<div class="small-info">
+    De mail wordt geopend in je standaard mailapp (bv. Gmail of Mail op iPhone).<br>
+    De inhoud van de mail is CSV met één lijn per ingevulde dag (datum, weekdag, shift).<br>
+    Je moet de mail zelf nog versturen.
+</div>
+
+</body>
+</html>
 
